@@ -1,0 +1,92 @@
+
+
+
+#  Imports
+import pytesseract
+import cv2
+import numpy as np
+import matplotlib.pyplot as plt
+from difflib import get_close_matches, SequenceMatcher
+from PIL import Image
+from google.colab import files
+import re
+
+#  Sanskrit-to-English Dictionary
+sanskrit_to_english = {
+    'नमस्ते': 'bow (namaste)', 'बालः': 'boy', 'बाला': 'girl', 'स': 'he', 'सा': 'she', 'तौ': 'they (m)',
+    'ते': 'they (f) many', 'पठ': 'read', 'पठति': 'reads', 'लिख': 'write', 'पच': 'cook', 'खाद': 'eat',
+    'चल': 'walk', 'हस': 'laugh', 'धाव': 'run', 'खेल': 'play', 'वद': 'speak', 'शाखा': 'branch',
+    'पत': 'fall', 'अम्बा': 'mother', 'जनक': 'father', 'पुत्र': 'son', 'एव': 'also', 'च': 'and',
+    'न': 'no', 'कुत्र': 'where?', 'अत्र': 'here', 'तत्र': 'there', 'अज': 'goat', 'गज': 'elephant',
+    'अश्व': 'horse', 'सिंह': 'lion', 'ति': 'does (singular)', 'तः': 'does (two)', 'तिः': 'does (many)'
+}
+
+# Similarity
+def get_similarity(a, b):
+    return SequenceMatcher(None, a, b).ratio()
+
+# processing of img
+def process_image(file_data, filename):
+
+    image = cv2.imdecode(np.frombuffer(file_data, np.uint8), cv2.IMREAD_COLOR)
+    rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+
+
+    plt.imshow(rgb)
+    plt.title(f"Uploaded Image: {filename}")
+    plt.axis("off")
+    plt.show()
+
+
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    gray = cv2.bilateralFilter(gray, 11, 17, 17)
+    thresh = cv2.adaptiveThreshold(
+        gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 31, 9
+    )
+
+
+    config = r'--oem 3 --psm 6 -l san'
+    text = pytesseract.image_to_string(thresh, config=config).strip()
+    clean_text = re.sub(r'[^ऀ-ॿ]+', '', text)
+    print(f"🔍 OCR Output: `{text}`")
+    print(f"🧹 Cleaned Text: `{clean_text}`")
+
+   #accuracy
+    best_match = None
+    best_score = 0.0
+    for word in sanskrit_to_english:
+        score = get_similarity(clean_text, word)
+        if score > best_score:
+            best_score = score
+            best_match = word
+
+    accuracy_percent = round(best_score * 100, 2)
+
+    if best_score >= 0.6:
+        meaning = sanskrit_to_english[best_match]
+        print(f"🟡 Closest Match: `{best_match}`")
+    else:
+        meaning = "❌ Not found in dictionary"
+
+    # acc output
+    if accuracy_percent >= 90:
+        status = "✅ Excellent"
+    elif accuracy_percent >= 70:
+        status = "⚠️ Fair"
+    else:
+        status = "❌ Poor"
+
+    print(f"📊 OCR Match Accuracy: {accuracy_percent}% ({status})")
+    print(f"✅ English Meaning: {meaning}")
+    print("--------------------------------------------------")
+
+# STEP 6: Upload Loop
+while True:
+    print("\n📤 Upload a Sanskrit word image (or press stop to end):")
+    uploaded = files.upload()
+
+    if not uploaded:
+        break
+
+    for filename, filedata in uploaded.items():
+        process_image(filedata, filename)
